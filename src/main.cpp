@@ -24,6 +24,8 @@ int overalldirection = ForwardDirection; // Default direction is forward
 #define Channel7 6
 #define Channel8 7
 
+#define MAX_CHANNELS 8
+
 void setup()
 {
     Serial.begin(115200);
@@ -36,14 +38,20 @@ void setup()
 
 void loop()
 {
-    static int prevValues[16] = {0};
-    int values[16];
+    static int prevValues[MAX_CHANNELS] = {0};
+    int values[MAX_CHANNELS];
 
+    static bool channelerror = false;
+
+    // Read all channel values
     for (int i = 0; i < 8; i++)
     {
         values[i] = IBus.readChannel(i);
         if (values[i] == 0 || values[i] == 65535 || values[i] < 900 || values[i] > 2100)
+        {
             Serial.printf("WARNING: Channel %2d abnormal value: %d\n", i + 1, values[i]);
+            channelerror = true;
+        }
         if (values[i] != prevValues[i])
         {
             Serial.printf("Channel %2d updated: %d\n", i + 1, values[i]);
@@ -51,18 +59,55 @@ void loop()
         }
     }
 
-    // Tank mixing logic
-    int throttle = map(values[Channel2], 900, 2100, -4095, 4095); // Forward/backward
-    int steering = map(values[Channel4], 900, 2100, -4095, 4095); // Left/right
+    // Check for errors on Channel 1, 2, and 4
+    if (
+        values[Channel1] == 0 || values[Channel1] == 65535 || values[Channel1] < 900 || values[Channel1] > 2100 ||
+        values[Channel2] == 0 || values[Channel2] == 65535 || values[Channel2] < 900 || values[Channel2] > 2100 ||
+        values[Channel4] == 0 || values[Channel4] == 65535 || values[Channel4] < 900 || values[Channel4] > 2100)
+    {
+        if (!channelerror)
+        {
+            Serial.println("ERROR: Abnormal value detected on Channel 1, 2, or 4!");
+            channelerror = true;
+        }
+    }
+    else
+    {
+        if (channelerror)
+        {
+            Serial.println("All channels normal. Error cleared.");
+            channelerror = false;
+        }
+    }
 
-    int leftPWM = throttle + steering;
-    int rightPWM = throttle - steering;
+    if (channelerror)
+    {
+        // If there is an error, stop all motors
+        stopAll();
+    }
+    else
+    {
+        // Mecanum drive mixing
+        int throttle = map(values[Channel2], 900, 2100, -4095, 4095); // Forward/backward
+        int strafe = map(values[Channel4], 900, 2100, -4095, 4095);   // Left/right (sideways)
+        int rotate = map(values[Channel1], 900, 2100, -4095, 4095);   // Rotation
 
-    // Constrain to valid PWM range
-    leftPWM = constrain(leftPWM, -4095, 4095);
-    rightPWM = constrain(rightPWM, -4095, 4095);
+        // Calculate each wheel's speed
+        int frontLeft = throttle + strafe + rotate;
+        int frontRight = throttle - strafe - rotate;
+        int rearLeft = throttle - strafe + rotate;
+        int rearRight = throttle + strafe - rotate;
 
-    // Set direction and speed for each side
-    setLeftSide(leftPWM >= 0, abs(leftPWM));
-    setRightSide(rightPWM >= 0, abs(rightPWM));
+        // Constrain to valid PWM range
+        frontLeft = constrain(frontLeft, -4095, 4095);
+        frontRight = constrain(frontRight, -4095, 4095);
+        rearLeft = constrain(rearLeft, -4095, 4095);
+        rearRight = constrain(rearRight, -4095, 4095);
+
+        // Set direction and speed for each motor
+        setFrontLeft(frontLeft >= 0, abs(frontLeft));
+        setFrontRight(frontRight >= 0, abs(frontRight));
+        setRearLeft(rearLeft >= 0, abs(rearLeft));
+        setRearRight(rearRight >= 0, abs(rearRight));
+    }
 }

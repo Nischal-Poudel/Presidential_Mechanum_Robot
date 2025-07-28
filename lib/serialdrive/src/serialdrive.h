@@ -1,231 +1,186 @@
 #include <Arduino.h>
 
-// Example pin definitions (update as needed)
-#define A_IN1 13 // Motor Driver A, Motor 1 (Front Left)
-#define A_IN2 5  // Motor Driver A, Motor 1 (Front Left)
-#define A_IN3 14 // Motor Driver A, Motor 2 (Front Right)
-#define A_IN4 27 // Motor Driver A, Motor 2 (Front Right)
-#define A_EN1 26 // Enable pin for Motor Driver A, Motor 1
-#define A_EN2 25 // Enable pin for Motor Driver A, Motor 2
+//----------------- Front Left Motor Pins -----------------
+#define FRONT_LEFT_F 19  // Was: B_IN3 - Forward Trigger
+#define FRONT_LEFT_R 21  // Was: B_IN4 - Reverse Trigger
+#define FRONT_LEFT_EN 23 // Was: B_ENB (Front Left Motor Enable/PWM)
 
-#define B_IN1 32 // Motor Driver B, Motor 1 (Rear Left)
-#define B_IN2 33 // Motor Driver B, Motor 1 (Rear Left)
-#define B_IN3 21 // Motor Driver B, Motor 2 (Rear Right)
-#define B_IN4 19 // Motor Driver B, Motor 2 (Rear Right)
-#define B_EN1 22 // Enable pin for Motor Driver B, Motor 1
-#define B_EN2 23 // Enable pin for Motor Driver B, Motor 2
+//----------------- Front Right Motor Pins -----------------
+#define FRONT_RIGHT_F 33  // Was: B_IN2
+#define FRONT_RIGHT_R 32  // Was: B_IN1
+#define FRONT_RIGHT_EN 22 // Was: B_ENA (Front Right Motor Enable/PWM)
 
-// PWM channels for ESP32 (must be unique per pin)
-#define PWM_A_EN1_CH 0
-#define PWM_A_EN2_CH 1
-#define PWM_B_EN1_CH 2
-#define PWM_B_EN2_CH 3
+//----------------- Rear Left Motor Pins -----------------
+#define REAR_LEFT_F 14  // Was: B_IN1 - Forward Trigger
+#define REAR_LEFT_R 27  // Was: B_IN2 - Reverse Trigger
+#define REAR_LEFT_EN 25 // Was: B_EN1 (Rear Left Motor Enable/PWM)
+
+//----------------- Rear Right Motor Pins -----------------
+#define REAR_RIGHT_F 5  // Was: B_IN3 -Forward Trigger
+#define REAR_RIGHT_R 13   // Was: B_IN4 -Reverse Trigger
+#define REAR_RIGHT_EN 26 // Was: B_EN2 (Rear Right Motor Enable/PWM)
+
+// ===================== PWM Channel Definitions =====================
+#define PWM_FRONT_LEFT_CH 0  // Was: PWM_A_EN1_CH
+#define PWM_FRONT_RIGHT_CH 1 // Was: PWM_A_EN2_CH
+#define PWM_REAR_LEFT_CH 2   // Was: PWM_B_EN1_CH
+#define PWM_REAR_RIGHT_CH 4  // Was: PWM_B_EN2_CH
 
 #define PWM_FREQ 5000
-#define LEDC_TIMER_12_BIT 12
+#define LEDC_TIMER_12_BIT 12 // 12-bit PWM (0-4095)
 
-void setMotor(int in1, int in2, bool forward)
+// ===================== Motor Control Functions =====================
+
+// Set direction for a motor using its Forward/Reverse pins
+void setMotor(int forwardPin, int reversePin, bool forward)
 {
     if (forward)
     {
-        digitalWrite(in1, LOW);
-        digitalWrite(in2, HIGH);
+        digitalWrite(forwardPin, LOW);
+        digitalWrite(reversePin, HIGH);
     }
     else
     {
-        digitalWrite(in1, HIGH);
-        digitalWrite(in2, LOW);
+        digitalWrite(forwardPin, HIGH);
+        digitalWrite(reversePin, LOW);
     }
 }
 
-void stopMotor(int in1, int in2)
+// Stop a motor (both pins HIGH)
+void stopMotor(int forwardPin, int reversePin)
 {
-    digitalWrite(in1, HIGH);
-    digitalWrite(in2, HIGH);
+    digitalWrite(forwardPin, HIGH);
+    digitalWrite(reversePin, HIGH);
 }
 
-// Analog (PWM) speed control for each enable pin
-void setMotorSpeed(int enPin, int pwmChannel, uint32_t speed)
+// Set PWM speed for a motor (0-4095 for 12-bit)
+void setMotorSpeed(int pwmChannel, uint32_t speed)
 {
-    ledcWrite(pwmChannel, speed); // speed: 0-255
+    ledcWrite(pwmChannel, speed);
 }
+
+// ===================== Independent Motor Control =====================
+
+// Front Left Motor control
+void setFrontLeft(bool forward, uint32_t speed)
+{
+    setMotor(FRONT_LEFT_F, FRONT_LEFT_R, forward);
+    setMotorSpeed(PWM_FRONT_LEFT_CH, speed);
+}
+
+// Front Right Motor control
+void setFrontRight(bool forward, uint32_t speed)
+{
+    setMotor(FRONT_RIGHT_F, FRONT_RIGHT_R, forward);
+    setMotorSpeed(PWM_FRONT_RIGHT_CH, speed);
+}
+
+// Rear Left Motor control
+void setRearLeft(bool forward, uint32_t speed)
+{
+    setMotor(REAR_LEFT_F, REAR_LEFT_R, forward);
+    setMotorSpeed(PWM_REAR_LEFT_CH, speed);
+}
+
+// Rear Right Motor control
+void setRearRight(bool forward, uint32_t speed)
+{
+    setMotor(REAR_RIGHT_F, REAR_RIGHT_R, forward);
+    setMotorSpeed(PWM_REAR_RIGHT_CH, speed);
+}
+
+// ===================== Group Motor Control (for convenience) =====================
 
 void moveForward(uint32_t speed = 0)
 {
-    setMotor(A_IN1, A_IN2, true); // Front Left
-    setMotor(A_IN3, A_IN4, true); // Front Right
-    setMotor(B_IN1, B_IN2, true); // Rear Left
-    setMotor(B_IN3, B_IN4, true); // Rear Right
-
-    setMotorSpeed(A_EN1, PWM_A_EN1_CH, speed);
-    setMotorSpeed(A_EN2, PWM_A_EN2_CH, speed);
-    setMotorSpeed(B_EN1, PWM_B_EN1_CH, speed);
-    setMotorSpeed(B_EN2, PWM_B_EN2_CH, speed);
+    setFrontLeft(true, speed);
+    setFrontRight(true, speed);
+    setRearLeft(true, speed);
+    setRearRight(true, speed);
 }
 
 void moveBackward(uint32_t speed = 0)
 {
-    setMotor(A_IN1, A_IN2, false);
-    setMotor(A_IN3, A_IN4, false);
-    setMotor(B_IN1, B_IN2, false);
-    setMotor(B_IN3, B_IN4, false);
-
-    setMotorSpeed(A_EN1, PWM_A_EN1_CH, speed);
-    setMotorSpeed(A_EN2, PWM_A_EN2_CH, speed);
-    setMotorSpeed(B_EN1, PWM_B_EN1_CH, speed);
-    setMotorSpeed(B_EN2, PWM_B_EN2_CH, speed);
+    setFrontLeft(false, speed);
+    setFrontRight(false, speed);
+    setRearLeft(false, speed);
+    setRearRight(false, speed);
 }
 
 void turnLeft(uint32_t speed = 0)
 {
-    setMotor(A_IN1, A_IN2, false); // Front Left reverse
-    setMotor(A_IN3, A_IN4, true);  // Front Right forward
-    setMotor(B_IN1, B_IN2, false); // Rear Left reverse
-    setMotor(B_IN3, B_IN4, true);  // Rear Right forward
-
-    setMotorSpeed(A_EN1, PWM_A_EN1_CH, speed);
-    setMotorSpeed(A_EN2, PWM_A_EN2_CH, speed);
-    setMotorSpeed(B_EN1, PWM_B_EN1_CH, speed);
-    setMotorSpeed(B_EN2, PWM_B_EN2_CH, speed);
+    setFrontLeft(false, speed);
+    setRearLeft(false, speed);
+    setFrontRight(true, speed);
+    setRearRight(true, speed);
 }
 
 void turnRight(uint32_t speed = 0)
 {
-    setMotor(A_IN1, A_IN2, true);  // Front Left forward
-    setMotor(A_IN3, A_IN4, false); // Front Right reverse
-    setMotor(B_IN1, B_IN2, true);  // Rear Left forward
-    setMotor(B_IN3, B_IN4, false); // Rear Right reverse
-
-    setMotorSpeed(A_EN1, PWM_A_EN1_CH, speed);
-    setMotorSpeed(A_EN2, PWM_A_EN2_CH, speed);
-    setMotorSpeed(B_EN1, PWM_B_EN1_CH, speed);
-    setMotorSpeed(B_EN2, PWM_B_EN2_CH, speed);
+    setFrontLeft(true, speed);
+    setRearLeft(true, speed);
+    setFrontRight(false, speed);
+    setRearRight(false, speed);
 }
 
 void stopAll()
 {
-    stopMotor(A_IN1, A_IN2);
-    stopMotor(A_IN3, A_IN4);
-    stopMotor(B_IN1, B_IN2);
-    stopMotor(B_IN3, B_IN4);
+    stopMotor(FRONT_LEFT_F, FRONT_LEFT_R);
+    stopMotor(FRONT_RIGHT_F, FRONT_RIGHT_R);
+    stopMotor(REAR_LEFT_F, REAR_LEFT_R);
+    stopMotor(REAR_RIGHT_F, REAR_RIGHT_R);
 
-    setMotorSpeed(A_EN1, PWM_A_EN1_CH, 0);
-    setMotorSpeed(A_EN2, PWM_A_EN2_CH, 0);
-    setMotorSpeed(B_EN1, PWM_B_EN1_CH, 0);
-    setMotorSpeed(B_EN2, PWM_B_EN2_CH, 0);
+    setMotorSpeed(PWM_FRONT_LEFT_CH, 0);
+    setMotorSpeed(PWM_FRONT_RIGHT_CH, 0);
+    setMotorSpeed(PWM_REAR_LEFT_CH, 0);
+    setMotorSpeed(PWM_REAR_RIGHT_CH, 0);
 }
 
 void enableDrivers()
 {
-    // PWM always enabled, but you can set speed to max
-    setMotorSpeed(A_EN1, PWM_A_EN1_CH, 255);
-    setMotorSpeed(A_EN2, PWM_A_EN2_CH, 255);
-    setMotorSpeed(B_EN1, PWM_B_EN1_CH, 255);
-    setMotorSpeed(B_EN2, PWM_B_EN2_CH, 255);
+    setMotorSpeed(PWM_FRONT_LEFT_CH, 4095);
+    setMotorSpeed(PWM_FRONT_RIGHT_CH, 4095);
+    setMotorSpeed(PWM_REAR_LEFT_CH, 4095);
+    setMotorSpeed(PWM_REAR_RIGHT_CH, 4095);
 }
 
 void disableDrivers()
 {
-    setMotorSpeed(A_EN1, PWM_A_EN1_CH, 0);
-    setMotorSpeed(A_EN2, PWM_A_EN2_CH, 0);
-    setMotorSpeed(B_EN1, PWM_B_EN1_CH, 0);
-    setMotorSpeed(B_EN2, PWM_B_EN2_CH, 0);
+    setMotorSpeed(PWM_FRONT_LEFT_CH, 0);
+    setMotorSpeed(PWM_FRONT_RIGHT_CH, 0);
+    setMotorSpeed(PWM_REAR_LEFT_CH, 0);
+    setMotorSpeed(PWM_REAR_RIGHT_CH, 0);
 }
+
+// ===================== Initialization =====================
 
 void iniMotorDriver()
 {
-    pinMode(A_IN1, OUTPUT_OPEN_DRAIN);
-    pinMode(A_IN2, OUTPUT_OPEN_DRAIN);
-    pinMode(A_IN3, OUTPUT_OPEN_DRAIN);
-    pinMode(A_IN4, OUTPUT_OPEN_DRAIN);
+    pinMode(FRONT_LEFT_F, OUTPUT_OPEN_DRAIN);  // Was: A_IN1
+    pinMode(FRONT_LEFT_R, OUTPUT_OPEN_DRAIN);  // Was: A_IN2
+    pinMode(FRONT_RIGHT_F, OUTPUT_OPEN_DRAIN); // Was: A_IN3
+    pinMode(FRONT_RIGHT_R, OUTPUT_OPEN_DRAIN); // Was: A_IN4
+    pinMode(REAR_LEFT_F, OUTPUT_OPEN_DRAIN);   // Was: B_IN1
+    pinMode(REAR_LEFT_R, OUTPUT_OPEN_DRAIN);   // Was: B_IN2
+    pinMode(REAR_RIGHT_F, OUTPUT_OPEN_DRAIN);  // Was: B_IN3
+    pinMode(REAR_RIGHT_R, OUTPUT_OPEN_DRAIN);  // Was: B_IN4
 
-    pinMode(B_IN1, OUTPUT_OPEN_DRAIN);
-    pinMode(B_IN2, OUTPUT_OPEN_DRAIN);
-    pinMode(B_IN3, OUTPUT_OPEN_DRAIN);
-    pinMode(B_IN4, OUTPUT_OPEN_DRAIN);
+    pinMode(FRONT_LEFT_EN, OUTPUT);  // Was: A_EN1
+    pinMode(FRONT_RIGHT_EN, OUTPUT); // Was: A_EN2
+    pinMode(REAR_LEFT_EN, OUTPUT);   // Was: B_EN1
+    pinMode(REAR_RIGHT_EN, OUTPUT);  // Was: B_EN2
 
-    pinMode(A_EN1, OUTPUT);
-    pinMode(A_EN2, OUTPUT);
-    pinMode(B_EN1, OUTPUT);
-    pinMode(B_EN2, OUTPUT);
+    ledcSetup(PWM_FRONT_LEFT_CH, PWM_FREQ, LEDC_TIMER_12_BIT);
+    ledcAttachPin(FRONT_LEFT_EN, PWM_FRONT_LEFT_CH);
 
-    // Setup PWM channels for enable pins
-    ledcSetup(PWM_A_EN1_CH, PWM_FREQ, LEDC_TIMER_12_BIT);
-    ledcAttachPin(A_EN1, PWM_A_EN1_CH);
+    ledcSetup(PWM_FRONT_RIGHT_CH, PWM_FREQ, LEDC_TIMER_12_BIT);
+    ledcAttachPin(FRONT_RIGHT_EN, PWM_FRONT_RIGHT_CH);
 
-    ledcSetup(PWM_A_EN2_CH, PWM_FREQ, LEDC_TIMER_12_BIT);
-    ledcAttachPin(A_EN2, PWM_A_EN2_CH);
+    ledcSetup(PWM_REAR_LEFT_CH, PWM_FREQ, LEDC_TIMER_12_BIT);
+    ledcAttachPin(REAR_LEFT_EN, PWM_REAR_LEFT_CH);
 
-    ledcSetup(PWM_B_EN1_CH, PWM_FREQ, LEDC_TIMER_12_BIT);
-    ledcAttachPin(B_EN1, PWM_B_EN1_CH);
+    ledcSetup(PWM_REAR_RIGHT_CH, PWM_FREQ, LEDC_TIMER_12_BIT);
+    ledcAttachPin(REAR_RIGHT_EN, PWM_REAR_RIGHT_CH);
 
-    ledcSetup(PWM_B_EN2_CH, PWM_FREQ, LEDC_TIMER_12_BIT);
-    ledcAttachPin(B_EN2, PWM_B_EN2_CH);
-
-    enableDrivers();
     stopAll();
-}
-
-// Set direction and speed for left side motors independently
-void setLeftSide(bool forward, uint32_t speed)
-{
-    // Front Left
-    setMotor(A_IN1, A_IN2, forward);
-    setMotorSpeed(A_EN1, PWM_A_EN1_CH, speed);
-
-    // Rear Left
-    setMotor(B_IN1, B_IN2, forward);
-    setMotorSpeed(B_EN1, PWM_B_EN1_CH, speed);
-}
-
-// Set direction and speed for right side motors independently
-void setRightSide(bool forward, uint32_t speed)
-{
-    // Front Right
-    setMotor(A_IN3, A_IN4, forward);
-    setMotorSpeed(A_EN2, PWM_A_EN2_CH, speed);
-
-    // Rear Right
-    setMotor(B_IN3, B_IN4, forward);
-    setMotorSpeed(B_EN2, PWM_B_EN2_CH, speed);
-}
-
-// Example: driveMotor('f', 200) for forward at speed 200
-void driveMotor(char input, uint32_t speed = 0)
-{
-    char cmd = input;
-    switch (cmd)
-    {
-    case 'f':
-        moveForward(speed);
-        Serial.println("Forward");
-        break;
-    case 'b':
-        moveBackward(speed);
-        Serial.println("Backward");
-        break;
-    case 'l':
-        turnLeft(speed);
-        Serial.println("Left");
-        break;
-    case 'r':
-        turnRight(speed);
-        Serial.println("Right");
-        break;
-    case 's':
-        stopAll();
-        Serial.println("Stop");
-        break;
-    case 'e':
-        enableDrivers();
-        Serial.println("Drivers enabled");
-        break;
-    case 'd':
-        disableDrivers();
-        Serial.println("Drivers disabled");
-        break;
-    default:
-        Serial.println("Unknown command");
-        break;
-    }
 }
